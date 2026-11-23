@@ -1407,7 +1407,19 @@ function songPlay(root){
   /* panel de sincronización */
   const syncBox = h('div', {class:'sync', style:'display:none'});
   const syncTxt = h('div'); const markBtn = h('button', {class:'big primary', onclick:()=>markChord()}, '¡Cambia el acorde! (Espacio)');
-  const undoBtn = h('button', {onclick:()=>{ if(P.syncIdx > 0){ P.syncIdx--; P.times[P.syncIdx] = null; saveTimes(); refreshSync(); P.lastLeft = 'x'; renderPanel(); } }}, '↶ Deshacer');
+  const undoBtn = h('button', {onclick:()=>{
+    if(P.syncIdx <= 0) return;
+    if(P.syncMode === 'line'){   /* deshacer = volver a la línea anterior entera */
+      const lines = Object.keys(P.lineChords).map(Number).sort((x,y)=>x-y);
+      const cur = P.lineOf[Math.min(P.syncIdx, P.total-1)], atEnd = P.syncIdx >= P.total;
+      let pos = atEnd ? lines.length : lines.indexOf(cur);
+      if(pos <= 0) return;
+      P.lineChords[lines[pos-1]].forEach(ci => { P.times[ci] = null; });
+      P.syncIdx = P.lineChords[lines[pos-1]][0];
+    } else { P.syncIdx--; P.times[P.syncIdx] = null; }
+    saveTimes(); refreshSync(); P.lastLeft = 'x'; renderPanel();
+    if(P.chEls[P.syncIdx]) P.chEls[P.syncIdx].scrollIntoView({block:'center', behavior:'smooth'});
+  }}, '↶ Deshacer');
   const clearBtn = h('button', {class:'danger', onclick:()=>{ if(confirm('¿Borrar todas las marcas de tiempo de esta canción?')){ P.times = P.times.map(()=>null); P.syncIdx = 0; saveTimes(); refreshSync(); P.lastLeft = 'x'; renderPanel(); } }}, 'Borrar marcas');
   const modeLine = h('button', {onclick:()=>setMode('line')}, 'Por líneas (rápido)');
   const modeChord = h('button', {onclick:()=>setMode('chord')}, 'Acorde a acorde (preciso)');
@@ -1443,6 +1455,7 @@ function songPlay(root){
   function markChord(){
     if(!P.syncOn || !P.ready) return;
     if(P.syncIdx >= P.total){ toast('Ya marcaste todos los acordes'); return; }
+    const nowMs = Date.now(); if(P.lastMark && nowMs - P.lastMark < 400){ toast('Muy rápido: he ignorado esa pulsación'); return; } P.lastMark = nowMs;
     let t = 0; try{ t = P.player.getCurrentTime() - (P.audioSrc ? 0.08 : 0.12); }catch(e){}
     t = Math.round(Math.max(0, t)*100)/100;
     if(P.syncMode === 'line'){
