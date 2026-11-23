@@ -1,5 +1,12 @@
-Aquí van los vídeos de los ritmos: video_1.mp4 (Ritmo 10), video_2.mp4 (Ritmo 11), video_3.mp4 (Ritmo 13)...
+Aquí van los vídeos de la pestaña Ritmos (mp4 comprimidos, 720p, de 5 a 16 MB cada uno).
 Sube esta carpeta entera a GitHub junto con el resto de la app.
 
-Nombres de los vídeos: video_1.mp4 (Ritmo 10), video_2.mp4 (Ritmo 11), video_3.mp4 (Ritmo 13).
-Para el resto, usa el número del ritmo: ritmo_4.mp4, ritmo_5.mp4, ritmo_16.mp4 (arpegio 16), ritmo_28.mp4...
+Nombres que busca la app:
+  Ritmo 4 al 9, 12, 14 al 35  ->  ritmo_4.mp4 ... ritmo_35.mp4
+  Ritmo 10, 11 y 13           ->  video_1.mp4, video_2.mp4, video_3.mp4
+  Arpegio 16                  ->  extra_16_cambio.mp4 y extra_16_progresion.mp4
+  Arpegio 17                  ->  extra_17_cambio.mp4
+  Arpegio 18                  ->  extra_18_cambio.mp4 (pendiente) y extra_18_progresion.mp4
+
+Los ritmos con varios vídeos (16 y 18) muestran un selector encima del reproductor.
+GitHub no admite archivos de más de 100 MB: si añades otro vídeo, comprímelo antes.
