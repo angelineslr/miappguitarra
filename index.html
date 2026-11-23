@@ -59,6 +59,8 @@ textarea{width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:
 label{display:block;font-weight:600;font-size:13.5px;margin:12px 0 5px;color:var(--muted)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{padding:6px 13px;border-radius:999px;font-weight:650;font-size:14px}
+.chip{display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;border-radius:14px;padding:6px 13px;min-width:56px}
+.chip small.es{font-size:11px;font-weight:500;opacity:.7}
 .chip.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .chip.ok::after{content:" ✓";color:var(--ok)}
 .chip.sel.ok::after{color:var(--accent-ink)}
@@ -141,6 +143,14 @@ th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--line)}
 .pat .pc{flex:1 1 0;max-width:46px;min-width:0;text-align:center;border:1px solid var(--line);border-radius:10px;padding:6px 2px;background:var(--card)}
 .pat .pc small{display:block;color:var(--muted);font-size:11px}
 .pat .pc b{font-size:22px;line-height:1.2}
+.patset .pat+.pat{margin-top:4px}
+.pat .pc.acc{border:2px solid var(--accent);background:var(--accent-soft)}
+.pat .pc.acc.on{background:var(--accent)}
+.pat.big{gap:6px}
+.pat.big .pc{max-width:78px;padding:8px 2px 6px}
+.pat.big .pc b{font-size:36px;line-height:1.1;display:block}
+.pat .pc .syl{display:block;font-size:13px;font-weight:650;min-height:18px;color:var(--muted)}
+.pat .pc.on .syl{color:var(--accent-ink)}
 .pat .pc.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .pat .pc.on small{color:var(--accent-ink)}
 .pat button.pcell{flex:1 1 0;min-width:0;max-width:52px;height:52px;font-size:22px;padding:0}
@@ -178,6 +188,9 @@ th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--line)}
 .ssvg .cg.cur .stem{stroke:var(--accent)}
 .ssvg .cg.done{opacity:.55}
 .scur{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--accent);opacity:.85;pointer-events:none;transition:left .1s linear;z-index:2;border-radius:2px}
+.scorebar{display:flex;align-items:center;gap:10px;margin:0 0 8px;flex-wrap:wrap}
+.wideonly{display:none}
+.scorebar select{padding:6px 8px;font-size:13.5px}
 .ed .edgrid{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;font-size:14px}
 .ed .pm{display:inline-flex;gap:6px}
 .ed .pm button{min-width:42px}
@@ -202,6 +215,7 @@ th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--line)}
   .songl{min-width:0}
   .songr{position:sticky;top:20px;max-height:calc(100vh - 40px);overflow:auto;padding:2px;min-width:0;scrollbar-gutter:stable}
   .songr .scorebox{max-height:none;overflow:visible}
+  .wideonly{display:flex}
   .songl .nowp{display:none}
   .song{font-size:18px}
 }
@@ -263,7 +277,7 @@ function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add
 
 /* ============================== almacenamiento ============================== */
 const KEY = 'guitarra-app-v1';
-function defaultDb(){ return { songs:[], mastered:{}, days:{}, pairs:{}, quiz:{correct:0,total:0,miss:{}}, songStats:{}, goalMin:10, seeded:false, rhythms:[], rhythmStats:{}, progs:{} }; }
+function defaultDb(){ return { songs:[], mastered:{}, days:{}, pairs:{}, quiz:{correct:0,total:0,miss:{}}, songStats:{}, goalMin:10, seeded:false, rhythms:[], rhythmStats:{}, progs:{}, ui:{ split:55, perRow:0 } }; }
 function loadDb(){
   try{ const r = localStorage.getItem(KEY); if(r) return Object.assign(defaultDb(), JSON.parse(r)); }catch(e){}
   return defaultDb();
@@ -516,11 +530,11 @@ function createMetro(onBeat){
 /* ============================== seguimiento del tiempo ============================== */
 let lastAct = Date.now();
 ['pointerdown','keydown','touchstart'].forEach(ev => document.addEventListener(ev, ()=>{ lastAct = Date.now(); }, {passive:true}));
-const busy = { drill:false, reto:false, yt:false, prog:false, rhythm:false };
+const busy = { drill:false, yt:false, prog:false, rhythm:false };
 let view = 'acordes';
 setInterval(()=>{
   if(document.visibilityState !== 'visible' || view === 'progreso') return;
-  const isBusy = busy.drill || busy.reto || busy.yt || busy.prog || busy.rhythm;
+  const isBusy = busy.drill || busy.yt || busy.prog || busy.rhythm;
   if(!isBusy && Date.now() - lastAct > 90000) return;
   const k = dayKey();
   const d = db.days[k] || (db.days[k] = { sec:0 });
@@ -600,6 +614,23 @@ function spToEn(tok){
   if(sl >= 0){ const b = /^(DO|RE|MI|FA|SOL|LA|SI)([#b]?)$/.exec(rest.slice(sl+1)); if(b) rest = rest.slice(0, sl) + '/' + ES2EN[b[1]] + b[2]; }
   return ES2EN[m[1]] + m[2] + rest;
 }
+const ES_NAME = {C:'Do', D:'Re', E:'Mi', F:'Fa', G:'Sol', A:'La', B:'Si'};
+/* nombre en notación española en minúsculas/mayúscula inicial: A → La, F#m → Fa#m, G/B → Sol/Si */
+const esName = n => String(n).replace(/^([A-G])/, (x, l) => ES_NAME[l]).replace(/\/([A-G])/, (x, l) => '/' + ES_NAME[l]);
+const bothName = n => { const e = esName(n); return e === n ? n : n + ' ('+e+')'; };
+/* acepta tanto "Am" como "La m", "Lam", "Sol7", "Fa#m"… y devuelve el nombre americano si es un acorde válido */
+function normChord(v){
+  v = String(v || '').trim(); if(!v) return v;
+  if(chordInfo(v)) return v;
+  const m = /^(do|re|mi|fa|sol|la|si)\s*([#b]?)\s*(.*)$/i.exec(v);
+  if(m){
+    let rest = m[3], sl = rest.indexOf('/');
+    if(sl >= 0){ const b = /^(do|re|mi|fa|sol|la|si)([#b]?)$/i.exec(rest.slice(sl+1)); if(b) rest = rest.slice(0, sl) + '/' + ES2EN[b[1].toUpperCase()] + b[2]; }
+    const c = ES2EN[m[1].toUpperCase()] + m[2] + rest;
+    if(chordInfo(c)) return c;
+  }
+  return v;
+}
 function toES(name){
   return String(name).replace(/^([A-G])/, (x, l) => EN2ES[l]).replace(/\/([A-G])/, (x, l) => '/' + EN2ES[l]);
 }
@@ -673,7 +704,8 @@ function renderNav(){
   }));
 }
 function go(v){
-  stopDrill(); stopReto(); stopEngine(); leaveRhythm(); leaveSong();
+  stopDrill(); stopEngine(); leaveRhythm(); leaveSong();
+  if(v === view){ if(v === 'ritmos') rv = {mode:'list', id:null}; if(v === 'canciones') sv = {mode:'list', id:null}; }  /* pulsar otra vez la pestaña vuelve a su lista */
   view = v; renderNav(); render();
   window.scrollTo(0,0);
 }
@@ -694,8 +726,8 @@ function chordDetail(name){
     h('div', {class:'detail'},
       diagram(name, 170),
       h('div', {class:'grow'},
-        h('div', {class:'nm', text:name}),
-        h('div', {class:'muted', text:'Notas: '+info.notes.join(' · ')}),
+        h('div', {class:'nm'}, name, esName(name) !== name ? h('span', {class:'muted', style:'font-size:.5em;font-weight:600;margin-left:10px', text:'('+esName(name)+')'}) : null),
+        h('div', {class:'muted', text:'Notas: '+info.notes.map(bothName).join(' · ')}),
         info.approx ? h('div', {class:'note', text:'Forma aproximada: muestro la versión básica de este acorde.'}) : null,
         info.bass != null ? h('div', {class:'muted small', text:'Con bajo en '+SHARPS[info.bass]+' (el diagrama muestra el acorde base).'}) : null,
         h('div', {class:'row', style:'margin-top:12px'},
@@ -710,15 +742,16 @@ function chordDetail(name){
 function chipGrid(names){
   return h('div', {class:'chips'}, names.map(n => {
     const info = chordInfo(n);
-    return h('button', {class:'chip'+(n===selChord?' sel':'')+(info && db.mastered[info.key]?' ok':''), onclick:()=>{ selChord = n; render(); playChord(n,'strum'); }}, n);
+    return h('button', {class:'chip'+(n===selChord?' sel':'')+(info && db.mastered[info.key]?' ok':''), onclick:()=>{ selChord = n; render(); playChord(n,'strum'); }}, h('span', {text:n}), h('small', {class:'es', text:esName(n)}));
   }));
 }
 function renderAcordes(root){
-  const inp = h('input', {type:'text', placeholder:'Escribe un acorde (F#m, C7…)', list:'chordlist', size:'20', 'aria-label':'Buscar acorde'});
-  const go1 = () => { const v = inp.value.trim(); if(!v) return; selChord = v; render(); if(chordInfo(v)) playChord(v,'strum'); };
+  const inp = h('input', {type:'text', placeholder:'Escribe un acorde (F#m, C7, La, Sol7…)', list:'chordlist', size:'34', 'aria-label':'Buscar acorde'});
+  const go1 = () => { const v = normChord(inp.value); if(!v) return; selChord = v; render(); if(chordInfo(v)) playChord(v,'strum'); };
   inp.addEventListener('keydown', e => { if(e.key === 'Enter') go1(); });
   add(root,
     h('h2', {text:'Acordes'}),
+    h('p', {class:'muted small', style:'margin:-6px 0 12px', text:'Notación americana y española: C = Do · D = Re · E = Mi · F = Fa · G = Sol · A = La · B = Si. La «m» es menor (Am = La menor).'}),
     h('div', {class:'row', style:'margin-bottom:12px'}, inp, h('button', {onclick:go1}, 'Ver')),
     chordDetail(selChord),
     GROUPS.map(([t,names]) => [h('h3',{text:t}), chipGrid(names)]),
@@ -732,33 +765,32 @@ function renderAcordes(root){
 /* ============================== VISTA: practicar ============================== */
 let pTab = 'cambios';
 const pr = { a:'C', b:'G', bpm:60, beats:4 };
-let drill = null, reto = null, quiz = null;
+let drill = null, quiz = null;
 const pairKey = () => { const a = chordInfo(pr.a), b = chordInfo(pr.b); return a && b ? [a.key, b.key].sort().join('-') : null; };
 
 function pairInputs(onChange){
   const mk = (prop, lab) => {
     const i = h('input', {type:'text', value:pr[prop], list:'chordlist', size:'7', 'aria-label':lab});
-    i.addEventListener('change', ()=>{ const v = i.value.trim(); if(chordInfo(v)){ pr[prop] = v; onChange(); } else { toast('No reconozco "'+v+'"'); i.value = pr[prop]; } });
+    i.addEventListener('change', ()=>{ const v = normChord(i.value); if(chordInfo(v)){ pr[prop] = v; onChange(); } else { toast('No reconozco "'+v+'"'); i.value = pr[prop]; } });
     return i;
   };
   return h('div', {class:'row'}, h('span',{class:'muted',text:'Entre'}), mk('a','Acorde A'), h('span',{class:'muted',text:'y'}), mk('b','Acorde B'));
 }
 function renderPracticar(root){
   root.append(h('h2', {text:'Practicar'}),
-    h('div', {class:'tabs'}, [['cambios','Cambios con metrónomo'],['prog','Progresiones'],['reto','Reto de 1 minuto'],['test','Test de acordes']].map(([k,t]) =>
-      h('button', {class:pTab===k?'on':'', onclick:()=>{ stopDrill(); stopReto(); stopQuiz(); stopEngine(); pTab = k; render(); }}, t))));
+    h('div', {class:'tabs'}, [['cambios','Cambios con metrónomo'],['prog','Progresiones'],['test','Test de acordes']].map(([k,t]) =>
+      h('button', {class:pTab===k?'on':'', onclick:()=>{ stopDrill(); stopQuiz(); stopEngine(); pTab = k; render(); }}, t))));
   const box = h('div'); root.append(box);
   if(pTab === 'cambios') renderCambios(box);
   else if(pTab === 'prog') renderProg(box);
-  else if(pTab === 'reto') renderReto(box);
   else renderTest(box);
 }
 
 /* --- cambios con metrónomo --- */
 function stageNodes(cur, next){
   return [
-    h('div', {}, h('div',{class:'lbl',text:'Ahora'}), diagram(cur, 130), h('div',{class:'nm',text:cur})),
-    h('div', {}, h('div',{class:'lbl',text:'Siguiente'}), diagram(next, 90), h('div',{class:'nm',text:next}))
+    h('div', {}, h('div',{class:'lbl',text:'Ahora'}), diagram(cur, 130), h('div',{class:'nm',text:bothName(cur)})),
+    h('div', {}, h('div',{class:'lbl',text:'Siguiente'}), diagram(next, 90), h('div',{class:'nm',text:bothName(next)}))
   ];
 }
 function renderCambios(box){
@@ -815,66 +847,6 @@ function stopDrill(){
   const dots = $('#dbeats'); if(dots) [...dots.children].forEach(d=>d.classList.remove('on'));
 }
 
-/* --- reto de 1 minuto --- */
-function renderReto(box){
-  const stage = h('div', {class:'stage', id:'rstage'});
-  const num = h('div', {class:'big-num', id:'rnum', text:'0'});
-  const left = h('div', {class:'muted', id:'rleft', style:'text-align:center', text:'60 s'});
-  const msg = h('div', {id:'rmsg', style:'text-align:center;font-weight:700;min-height:1.5em'});
-  const tap = h('button', {class:'big primary', id:'rtap', disabled:true}, '¡Cambio hecho!');
-  tap.addEventListener('click', retoTap);
-  const start = h('button', {id:'rstart', class:'primary'}, '▶ Empezar el minuto');
-  start.addEventListener('click', ()=> reto ? stopReto() : startReto());
-  const pk = pairKey(), best = pk && db.pairs[pk] && db.pairs[pk].cpm;
-  box.append(
-    h('div', {class:'card'},
-      h('p', {class:'muted', style:'margin-top:0', text:'Cuántas veces consigues cambiar entre los dos acordes en un minuto, con sonido limpio. Pulsa el botón (o la barra espaciadora) cada vez que completes un cambio.'}),
-      pairInputs(()=>{ stopReto(); render(); }),
-      h('div', {class:'muted small', style:'margin-top:8px', text: best ? 'Tu récord con este par: '+best+' cambios por minuto' : 'Aún no hay récord con este par.'})),
-    h('div', {class:'card'}, stage, num, left, msg, h('div',{style:'margin-top:12px'}, tap), h('div', {class:'row', style:'justify-content:center;margin-top:10px'}, start))
-  );
-  stage.replaceChildren(...stageNodes(pr.a, pr.b));
-}
-function retoUpdateStage(){
-  const arr = [pr.a, pr.b], stage = $('#rstage'); if(!stage || !reto) return;
-  stage.replaceChildren(...stageNodes(arr[reto.cur], arr[1-reto.cur]));
-}
-function startReto(){
-  if(reto) return;
-  reto = { cur:0, count:0, left:60, timer:null };
-  busy.reto = true;
-  $('#rtap').disabled = false; $('#rstart').textContent = '■ Parar'; $('#rmsg').textContent = '';
-  $('#rnum').textContent = '0'; $('#rleft').textContent = '60 s';
-  retoUpdateStage();
-  reto.timer = setInterval(()=>{
-    reto.left--; const l = $('#rleft'); if(l) l.textContent = reto.left+' s';
-    if(reto.left <= 0) stopReto(true);
-  }, 1000);
-}
-function retoTap(){
-  if(!reto) return;
-  reto.count++; reto.cur = 1 - reto.cur;
-  const n = $('#rnum'); if(n) n.textContent = reto.count;
-  retoUpdateStage();
-}
-function stopReto(finished){
-  if(!reto) return;
-  clearInterval(reto.timer);
-  const count = reto.count; reto = null; busy.reto = false;
-  const tap = $('#rtap'); if(tap) tap.disabled = true;
-  const st = $('#rstart'); if(st) st.textContent = '▶ Empezar el minuto';
-  const msg = $('#rmsg');
-  if(finished){
-    const pk = pairKey();
-    if(pk){
-      const p = db.pairs[pk] || (db.pairs[pk] = {});
-      const old = p.cpm || 0;
-      if(count > old){ p.cpm = count; save(); if(msg) msg.textContent = old ? '¡Nuevo récord! '+count+' (antes '+old+')' : 'Primer registro: '+count+' cambios'; }
-      else if(msg) msg.textContent = count+' cambios. Tu récord sigue en '+old+'.';
-    }
-  }
-}
-
 /* --- test de acordes --- */
 function stopQuiz(){ if(quiz && quiz.t) clearTimeout(quiz.t); quiz = null; }
 function renderTest(box){
@@ -920,45 +892,88 @@ const TOK_SYM = { D:'↓', U:'↑', M:'✕', B:'●', '-':'·' };
 const symOf = t => TOK_SYM[t] || t;
 const CYCLE = ['-','D','U','M','B','1','2','3'];
 const BUILTIN_RHYTHMS = [
-  { id:'b-negras', name:'Abajo a negras', steps:'D-D-D-D-', note:'Un golpe hacia abajo en cada pulso. Es el primero que conviene dominar.' },
-  { id:'b-corcheas', name:'Abajo y arriba', steps:'DUDUDUDU', note:'La mano baja y sube sin parar. Más adelante aprenderás a fallar a propósito algunos golpes.' },
-  { id:'b-pop', name:'Pop / folk', steps:'D-DU-UDU', note:'Abajo, abajo-arriba, arriba-abajo-arriba. Es el patrón de acompañamiento más usado.' },
-  { id:'b-vals', name:'Vals (3/4)', steps:'B-D-D-', note:'Bajo en el 1 y dos golpes ligeros en el 2 y el 3.' },
-  { id:'b-arpegio', name:'Arpegio básico', steps:'B3213212', note:'Pulgar en el bajo y después las tres cuerdas agudas, de grave a agudo y vuelta.' }
+  {"id":"b-r4", "num":4, "name":"No como chocolate", "steps":"D-DUDUDU", "syl":["Pá", "", "Pa", "ra", "Pa", "ra", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_4.mp4"},
+  {"id":"b-r5", "num":5, "name":"Más pan para todos", "steps":"D-D-DUDU", "syl":["Pá", "", "Pá", "", "Pa", "ra", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_5.mp4"},
+  {"id":"b-r6", "num":6, "name":"Él no bebe té", "steps":"D-D-DUD-", "syl":["Pá", "", "Pá", "", "Pa", "ra", "Pá", ""], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_6.mp4"},
+  {"id":"b-r7", "num":7, "name":"No quiero, no quiero", "steps":"D-DUD-DU", "syl":["Pá", "", "Pa", "ra", "Pá", "", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_7.mp4"},
+  {"id":"b-r8", "num":8, "name":"Vamos para la playa", "steps":"DUDU-UDU", "syl":["Pa", "ra", "Pa", "ra", "", "rá", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_8.mp4"},
+  {"id":"b-r9", "num":9, "name":"Sara canta muy bien", "steps":"DUDU-UD-", "syl":["Pa", "ra", "Pa", "ra", "", "ra", "Pá", ""], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_9.mp4"},
+  {"id":"b-r10", "num":10, "name":"Fran pone la radio", "steps":"D-DU-UDU", "syl":["Pá", "", "Pa", "ra", "", "ra", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "words":"Fran · po-ne · la · ra-dio", "file":"videos/video_1.mp4"},
+  {"id":"b-r11", "num":11, "name":"No quiero más miel", "steps":"D-DUD-D-", "syl":["Pá", "", "Pa", "ra", "Pá", "", "Pá", ""], "group":"Rasgueo en 4/4 (corcheas)", "words":"No · quie-ro · más · miel", "file":"videos/video_2.mp4"},
+  {"id":"b-r12", "num":12, "name":"Me siento muy bien", "steps":"D-DU-UD-", "syl":["Pá", "", "Pa", "ra", "", "ra", "Pá", ""], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_12.mp4"},
+  {"id":"b-r13", "num":13, "name":"Toca la guitarra", "steps":"DU-U-UDU", "syl":["Pa", "ra", "", "rá", "", "ra", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "words":"To-ca · la · gui · ta-rra", "file":"videos/video_3.mp4"},
+  {"id":"b-r14", "num":14, "name":"Ya es muy tarde", "steps":"D--U-UDU", "syl":["Pa", "", "", "rá", "", "ra", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_14.mp4"},
+  {"id":"b-r15", "num":15, "name":"Me gustas tú", "steps":"D--U-UD-", "syl":["Pa", "", "", "rá", "", "ra", "Pá", ""], "group":"Rasgueo en 4/4 (corcheas)", "file":"videos/ritmo_15.mp4"},
+  {"id":"b-r19", "num":19, "name":"Este ritmo es muy fácil", "steps":"DUDUDUDU", "syl":["Shu", "ku", "Shu", "ku", "Shu", "ku", "Shu", "ku"], "group":"Rasgueo en 4/4 (corcheas)", "acc":[2, 6], "note":"Acento en el 2 y el 4.", "file":"videos/ritmo_19.mp4"},
+  {"id":"b-r20", "num":20, "name":"Este ritmo es muy fácil", "steps":"DUDUDUDU", "syl":["Shu", "ku", "Shu", "kú", "Shu", "ku", "Shu", "ku"], "group":"Rasgueo en 4/4 (corcheas)", "acc":[3], "note":"Acento en la ↑ del 2.", "file":"videos/ritmo_20.mp4"},
+  {"id":"b-r21", "num":21, "name":"Vamos pará la playa", "steps":"DUDU-UDU", "syl":["Pa", "ra", "Pa", "rá", "", "ra", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "acc":[3], "note":"Acento en la ↑ del 2.", "file":"videos/ritmo_21.mp4"},
+  {"id":"b-r22", "num":22, "name":"Ya es muy tarde", "steps":"D--U-UDU", "syl":["Pa", "", "", "rá", "", "ra", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "acc":[3], "note":"Acento en la ↑ del 2.", "file":"videos/ritmo_22.mp4"},
+  {"id":"b-r23", "num":23, "name":"No tardes", "steps":"D--U--D-", "syl":["Pa", "", "", "ra", "", "", "Pá", ""], "group":"Rasgueo en 4/4 (corcheas)", "acc":[3], "note":"Acento en la ↑ del 2.", "file":"videos/ritmo_23.mp4"},
+  {"id":"b-r24", "num":24, "name":"Más pan para todos", "steps":"D-D-DUDU", "syl":["Pa", "", "Pá", "", "Pa", "ra", "Pa", "ra"], "group":"Rasgueo en 4/4 (corcheas)", "acc":[2], "note":"Acento en la ↓ del 2.", "file":"videos/ritmo_24.mp4"},
+  {"id":"b-r25", "num":25, "name":"Siempre hay que vivir en el presente", "steps":"D-D-DUDU--D-DUDU", "group":"Compases especiales", "meter":"2 compases de 4/4", "acc":[0, 7, 10], "note":"Dos compases seguidos (8 tiempos). Acentos en el 1, en la ↑ del 4 y en el 6. Revisa que el esquema coincide con tu vídeo.", "file":"videos/ritmo_25.mp4"},
+  {"id":"b-r26", "num":26, "name":"No como pan", "steps":"D-DUD-", "syl":["Pa", "", "Pa", "ra", "Pá", ""], "group":"Compases especiales", "meter":"3/4", "acc":[4], "note":"Compás de 3/4. Acento en el 3.", "file":"videos/ritmo_26.mp4"},
+  {"id":"b-r27", "num":27, "name":"No como carne", "steps":"D-DUDU", "syl":["Pa", "", "Pa", "ra", "Pa", "ra"], "group":"Compases especiales", "meter":"3/4", "acc":[0], "note":"Compás de 3/4. Acento en el 1.", "file":"videos/ritmo_27.mp4"},
+  {"id":"b-r28", "num":28, "name":"El Tren: Este ritmo es muy fácil (x2)", "steps":"DUDUDUDUDUDUDUDU", "group":"Compases especiales", "meter":"4/4 con semicorcheas", "sub":4, "acc":[4, 12], "note":"Cuatro golpes por tiempo. Acento en el 2 y el 4.", "file":"videos/ritmo_28.mp4"},
+  {"id":"b-r16", "num":16, "name":"Este arpegio es muy fácil", "steps":"B3212323", "syl":["p", "i", "c", "a", "c", "i", "c", "i"], "group":"Arpegios", "meter":"4/4", "note":"Mano derecha: p = pulgar, i = índice, c = corazón, a = anular. B = cuerda del bajo.", "file":"videos/ritmo_16.mp4"},
+  {"id":"b-r17", "num":17, "name":"Es muy fácil, es muy fácil", "steps":"B321B321", "syl":["p", "i", "c", "a", "p", "i", "c", "a"], "group":"Arpegios", "meter":"4/4", "note":"Mano derecha: p, i, c, a. B = cuerda del bajo.", "file":"videos/ritmo_17.mp4"},
+  {"id":"b-r18", "num":18, "name":"Échale brócoli", "steps":"B32123", "syl":["p", "i", "c", "a", "c", "i"], "group":"Arpegios", "meter":"6/8", "every":3, "note":"Compás de 6/8: dos grupos de tres. B = cuerda del bajo.", "file":"videos/ritmo_18.mp4"},
+  { group:'Otros ritmos básicos', id:'b-negras', name:'Abajo a negras', steps:'D-D-D-D-', note:'Un golpe hacia abajo en cada pulso. Es el primero que conviene dominar.' },
+  { group:'Otros ritmos básicos', id:'b-corcheas', name:'Abajo y arriba', steps:'DUDUDUDU', note:'La mano baja y sube sin parar. Más adelante aprenderás a fallar a propósito algunos golpes.' },
+  { group:'Otros ritmos básicos', id:'b-pop', name:'Pop / folk', steps:'D-DU-UDU', note:'Abajo, abajo-arriba, arriba-abajo-arriba. Es el patrón de acompañamiento más usado.' },
+  { group:'Otros ritmos básicos', id:'b-vals', name:'Vals (3/4)', steps:'B-D-D-', note:'Bajo en el 1 y dos golpes ligeros en el 2 y el 3.' },
+  { group:'Otros ritmos básicos', id:'b-arpegio', name:'Arpegio básico', steps:'B3213212', note:'Pulgar en el bajo y después las tres cuerdas agudas, de grave a agudo y vuelta.' }
 ];
 const allRhythms = () => [...BUILTIN_RHYTHMS, ...db.rhythms];
 const getRhythm = id => allRhythms().find(r => r.id === id);
 const isBuiltin = id => String(id).startsWith('b-');
+const rTitle = r => (r.num ? (r.group === 'Arpegios' ? 'Arpegio ' : 'Ritmo ')+r.num+' · ' : '') + r.name;
 function parseTime(str){
   const v = String(str||'').trim(); if(!v) return null;
   let m = /^(\d+):(\d{1,2})$/.exec(v); if(m) return +m[1]*60 + +m[2];
   m = /^\d+(\.\d+)?$/.exec(v); if(m) return parseFloat(v);
   return undefined;
 }
-function patternView(steps){
-  const labels = steps.length === 6 ? ['1','y','2','y','3','y'] : ['1','y','2','y','3','y','4','y'];
-  return h('div', {class:'pat'}, [...steps].map((tk,i) => h('div', {class:'pc'}, h('small', {text:labels[i] || ''}), h('b', {text:symOf(tk)}))));
+function rLabels(R){
+  const n = R.steps.length;
+  if(R.sub === 4) return [...Array(n)].map((_, i) => ['1','e','y','a'][i % 4] === '1' ? String(Math.floor(i/4) + 1) : ['1','e','y','a'][i % 4]);
+  if(R.meter === '6/8') return ['1','2','3','4','5','6'];
+  if(n === 6) return ['1','y','2','y','3','y'];
+  return [...Array(n)].map((_, i) => i % 2 === 0 ? String(i/2 % 4 + 1) : 'y');
 }
-function setPat(el, pos){ if(el) [...el.children].forEach((c,i) => c.classList.toggle('on', i === pos)); }
+const rEvery = R => R ? (R.every || R.sub || 2) : 2;
+const rSub = R => (R && R.sub) || 2;
+function patternView(steps, syl, big, R){
+  const labels = R ? rLabels(R) : (steps.length === 6 ? ['1','y','2','y','3','y'] : ['1','y','2','y','3','y','4','y']);
+  const acc = (R && R.acc) || [];
+  const per = steps.length > 8 ? 8 : steps.length, rows = [];
+  [...steps].forEach((tk, i) => {
+    if(i % per === 0) rows.push(h('div', {class:'pat'+(big ? ' big' : '')}));
+    rows[rows.length-1].append(h('div', {class:'pc'+(acc.includes(i) ? ' acc' : '')}, h('small', {text:labels[i] || ''}), h('b', {text:symOf(tk)}), syl ? h('span', {class:'syl', text:syl[i] || ''}) : null));
+  });
+  return h('div', {class:'patset'}, rows);
+}
+function setPat(el, pos){ if(el) [...el.querySelectorAll('.pc')].forEach((c,i) => c.classList.toggle('on', i === pos)); }
 function later(when, fn){ setTimeout(fn, Math.max(0, (when - ac().currentTime) * 1000)); }
 
-function strumAt(name, tok, when){
+function strumAt(name, tok, when, acc){
   const info = chordInfo(name); if(!info) return;
+  const g = acc ? 1.7 : 1;
   const fr = info.v.frets, snd = [];
   fr.forEach((f,i) => { if(f >= 0) snd.push(i); });
   if(!snd.length) return;
   const freq = i => 440 * Math.pow(2, (OPEN_MIDI[i] + fr[i] - 69) / 12);
-  if(tok === 'D') snd.forEach((i,k) => pluck(freq(i), when + k*0.012, 1.4, 0.2));
-  else if(tok === 'U') snd.filter(i => i >= 2).reverse().forEach((i,k) => pluck(freq(i), when + k*0.010, 1.0, 0.14));
-  else if(tok === 'M') snd.forEach((i,k) => pluck(freq(i), when + k*0.006, 0.12, 0.12));
-  else if(tok === 'B') pluck(freq(snd[0]), when, 1.6, 0.28);
-  else if(/^[1-6]$/.test(tok)){ const i = 6 - (+tok); if(fr[i] >= 0) pluck(freq(i), when, 1.4, 0.22); }
+  if(tok === 'D') snd.forEach((i,k) => pluck(freq(i), when + k*0.012, 1.4, 0.2*g));
+  else if(tok === 'U') snd.filter(i => i >= 2).reverse().forEach((i,k) => pluck(freq(i), when + k*0.010, 1.0, 0.14*g));
+  else if(tok === 'M') snd.forEach((i,k) => pluck(freq(i), when + k*0.006, 0.12, 0.12*g));
+  else if(tok === 'B') pluck(freq(snd[0]), when, 1.6, 0.28*g);
+  else if(/^[1-6]$/.test(tok)){ const i = 6 - (+tok); if(fr[i] >= 0) pluck(freq(i), when, 1.4, 0.22*g); }
 }
-function createStepper(bpm, onStep){
+function createStepper(bpm, onStep, sub){
+  sub = sub || 2;
   let timer = null, nextT = 0, idx = 0, cur = bpm;
   function sched(){
     const c = ac();
-    while(nextT < c.currentTime + 0.15){ onStep(idx, nextT); nextT += 60 / cur / 2; idx++; }
+    while(nextT < c.currentTime + 0.15){ onStep(idx, nextT); nextT += 60 / cur / sub; idx++; }
   }
   return {
     start(){ nextT = ac().currentTime + 0.1; idx = 0; sched(); timer = setInterval(sched, 25); },
@@ -1044,7 +1059,7 @@ function renderProg(box){
   if(pg.rhythm !== 'none' && !R) pg.rhythm = 'none';
   const seq = h('div', {class:'seq'}, chords.map(c => h('span', {text:c})));
   const stage = h('div', {class:'stage'}, ...stageNodes(chords[0], chords[1]));
-  const pat = R ? patternView(R.steps) : null;
+  const pat = R ? patternView(R.steps, null, false, R) : null;
   const lapsEl = h('div', {class:'muted small', style:'text-align:center', text:''});
   const reset = fn => () => { stopEngine(); fn(); render(); };
   const sel = (label, opts, cur, onChange) => h('select', {'aria-label':label, onchange:ev => { stopEngine(); onChange(ev.target.value); render(); }},
@@ -1062,8 +1077,8 @@ function renderProg(box){
     let laps = 0, last = -1;
     const st = createStepper(pg.bpm, (i, when) => {
       const pos = i % spb, bar = Math.floor(i / spb), ci = Math.floor(bar / pg.bars) % chords.length;
-      if(pg.click && pos % 2 === 0) click(when, pos === 0);
-      if(R && pg.sound){ const tk = R.steps[pos]; if(tk !== '-') strumAt(chords[ci], tk, when); }
+      if(pg.click && pos % rEvery(R) === 0) click(when, pos === 0);
+      if(R && pg.sound){ const tk = R.steps[pos]; if(tk !== '-') strumAt(chords[ci], tk, when, R.acc && R.acc.includes(pos)); }
       later(when, () => {
         if(!eng || eng.kind !== 'prog') return;
         if(ci !== last){
@@ -1074,7 +1089,7 @@ function renderProg(box){
         }
         setPat(pat, pos);
       });
-    });
+    }, rSub(R));
     busy.prog = true;
     eng = { kind:'prog', stepper:st, onStop:() => {
       startBtn.textContent = '▶ Empezar';
@@ -1103,7 +1118,7 @@ function renderProg(box){
       hasBarre ? h('div', {class:'note', text:'Esta tonalidad incluye acordes de cejilla, que son más difíciles. Prueba con Do, Sol o La mayor, o con La menor, para empezar.'}) : null),
     h('div', {class:'card'},
       h('div', {class:'row'},
-        sel('Ritmo', [['none','Solo metrónomo'], ...allRhythms().map(r => [r.id, r.name])], pg.rhythm, v => { pg.rhythm = v; }),
+        sel('Ritmo', [['none','Solo metrónomo'], ...allRhythms().map(r => [r.id, rTitle(r)])], pg.rhythm, v => { pg.rhythm = v; }),
         bpm, bpmLbl),
       h('div', {class:'row', style:'margin-top:8px'}, toggleBtn('🎸 Sonido de guitarra', () => pg.sound, v => { pg.sound = v; }), toggleBtn('⏱ Metrónomo', () => pg.click, v => { pg.click = v; })),
       seq, stage, pat, lapsEl,
@@ -1129,14 +1144,18 @@ function rhythmList(root){
   add(root, h('h2', {text:'Ritmos'}),
     h('p', {class:'muted', text:'Patrones de rasgueo y arpegio para practicar con metrónomo. Añade los tuyos, con el vídeo donde se explican.'}),
     h('button', {class:'primary', onclick:() => { rv = {mode:'edit', id:null}; render(); }}, '+ Nuevo ritmo'),
-    h('div', {style:'margin-top:14px'}, allRhythms().map(r => {
-      const rs = db.rhythmStats[r.id];
-      return h('div', {class:'card songcard'},
-        h('button', {class:'open', onclick:() => { rv = {mode:'detail', id:r.id}; render(); }},
-          h('div', {class:'t', text:r.name}),
-          h('div', {class:'pattxt', text:[...r.steps].map(symOf).join(' ')}),
-          h('div', {class:'muted small', text:[r.steps.length === 6 ? '3/4' : '4/4', r.vid ? 'con vídeo' : '', rs && rs.status === 'dominado' ? '⭐ dominado' : ''].filter(Boolean).join(' · ')})));
-    })));
+    ...(() => {
+      const groups = [], seen = {};
+      allRhythms().forEach(r => { const g = r.group || 'Mis ritmos'; if(!seen[g]){ seen[g] = []; groups.push(g); } seen[g].push(r); });
+      return groups.map(g => h('div', {}, h('h3', {text:g}), seen[g].map(r => {
+        const rs = db.rhythmStats[r.id];
+        return h('div', {class:'card songcard'},
+          h('button', {class:'open', onclick:() => { rv = {mode:'detail', id:r.id}; render(); }},
+            h('div', {class:'t', text:rTitle(r)}),
+            h('div', {class:'pattxt', text:[...r.steps].map(symOf).join(' ')}),
+            h('div', {class:'muted small', text:[r.meter || (r.steps.length === 6 ? '3/4' : '4/4'), r.vid ? 'con vídeo' : '', rs && rs.status === 'dominado' ? '⭐ dominado' : ''].filter(Boolean).join(' · ')})));
+      })));
+    })());
 }
 function rhythmDetail(root){
   const R = getRhythm(rv.id);
@@ -1145,12 +1164,12 @@ function rhythmDetail(root){
   const rs = () => db.rhythmStats[R.id] || (db.rhythmStats[R.id] = { sec:0, status:'aprendiendo', maxBpm:0 });
   const D = rdet = { bpm:60, chord:'Am', sound:true, click:true, rate:1, loop:false, interval:null, vid:null, t0:0 };
   curRhythmId = R.id;
-  const pat = patternView(R.steps);
+  const pat = patternView(R.steps, R.syl, true, R);
   const chordBox = h('div', {class:'row', style:'justify-content:center'}, diagram(D.chord, 110));
   const chordInp = h('input', {type:'text', value:D.chord, list:'chordlist', size:'7', 'aria-label':'Acorde'});
   chordInp.addEventListener('change', () => {
-    const v = chordInp.value.trim();
-    if(chordInfo(v)){ D.chord = v; chordBox.replaceChildren(diagram(v, 110)); }
+    const v = normChord(chordInp.value);
+    if(chordInfo(v)){ D.chord = v; chordInp.value = v; chordBox.replaceChildren(diagram(v, 110)); }
     else { toast('No reconozco "'+v+'"'); chordInp.value = D.chord; }
   });
   const bpmLbl = h('b', {text:D.bpm+' BPM'});
@@ -1162,10 +1181,10 @@ function rhythmDetail(root){
     const spb = R.steps.length;
     const st = createStepper(D.bpm, (i, when) => {
       const pos = i % spb;
-      if(D.click && pos % 2 === 0) click(when, pos === 0);
-      if(D.sound){ const tk = R.steps[pos]; if(tk !== '-') strumAt(D.chord, tk, when); }
+      if(D.click && pos % rEvery(R) === 0) click(when, pos === 0);
+      if(D.sound){ const tk = R.steps[pos]; if(tk !== '-') strumAt(D.chord, tk, when, R.acc && R.acc.includes(pos)); }
       later(when, () => { if(eng && eng.kind === 'rhythm') setPat(pat, pos); });
-    });
+    }, rSub(R));
     D.t0 = Date.now(); busy.rhythm = true;
     eng = { kind:'rhythm', stepper:st, onStop:() => {
       setPat(pat, -1); startBtn.textContent = '▶ Empezar';
@@ -1178,7 +1197,9 @@ function rhythmDetail(root){
 
   add(root,
     h('div', {class:'row'}, h('button', {onclick:() => { leaveRhythm(); rv = {mode:'list', id:null}; render(); }}, '← Ritmos'), h('div', {class:'grow'}), statusBtn),
-    h('h2', {text:R.name, style:'margin-bottom:2px'}),
+    h('h2', {text:rTitle(R), style:'margin-bottom:2px'}),
+    R.words ? h('div', {style:'font-weight:650;font-size:17px;margin:2px 0'}, R.words) : null,
+    R.meter ? h('div', {class:'muted small', text:'Compás: '+R.meter+(R.acc && R.acc.length ? ' · los golpes con borde de color llevan acento' : '')}) : null,
     R.note ? h('div', {class:'muted', text:R.note}) : null);
 
   const vid = ytId(R.vid);
@@ -1201,9 +1222,18 @@ function rhythmDetail(root){
     add(root, wrap, h('div', {class:'ctrl'}, playB, rateSel, goB, loopB));
   }
 
+  if(!vid && R.file){
+    const v = h('video', {controls:true, playsinline:true, preload:'metadata', src:R.file, style:'width:100%;border-radius:14px;background:#000;display:block'});
+    const msg = h('div', {class:'note', style:'display:none', text:'Este vídeo todavía no está subido a la app ('+R.file+').'});
+    const ctl = h('div', {class:'ctrl'});
+    v.addEventListener('error', () => { v.style.display = 'none'; msg.style.display = ''; ctl.style.display = 'none'; });
+    const rateSel = h('select', {'aria-label':'Velocidad'}, [0.5,0.75,1].map(r => h('option', {value:r, selected:r === 1}, r === 1 ? 'Velocidad normal' : '× '+String(r).replace('.',','))));
+    rateSel.addEventListener('change', () => { v.playbackRate = +rateSel.value; });
+    ctl.append(rateSel); add(root, h('div', {style:'margin-top:12px'}, v, msg, ctl));
+  }
   add(root,
     h('div', {class:'card', style:'margin-top:12px'},
-      h('div', {class:'muted small', style:'text-align:center', text:'↓ abajo · ↑ arriba · ✕ golpe apagado · ● nota del bajo · 1 2 3 cuerda suelta (1 = la más aguda)'}),
+      h('div', {class:'muted small', style:'text-align:center', text:'↓ abajo · ↑ arriba · ✕ golpe apagado · ● bajo (B) · 1 2 3 cuerdas (1 = la más aguda)'+(R.syl && R.syl.some(x => /^[pica]$/.test(x)) ? ' · debajo: dedo de la mano derecha' : '')}),
       pat,
       h('div', {class:'row', style:'justify-content:center'}, h('span', {class:'muted', text:'Acorde'}), chordInp),
       chordBox,
@@ -1598,7 +1628,16 @@ function songPlay(root){
   const scoreBox = h('div', {class:'scorebox'});
   const cursor = h('div', {class:'scur'});
   const edBox = h('div', {class:'card ed', style:'display:none'});
-  R.append(edBox, scoreBox);
+  db.ui = Object.assign({ split:55, perRow:0 }, db.ui || {});
+  const applySplit = () => { lay.style.gridTemplateColumns = 'minmax(0,'+(100 - db.ui.split)+'fr) minmax(0,'+db.ui.split+'fr)'; };
+  const splitIn = h('input', {type:'range', min:35, max:80, step:1, value:db.ui.split, 'aria-label':'Ancho del pentagrama', style:'width:120px'});
+  splitIn.addEventListener('input', () => { db.ui.split = +splitIn.value; applySplit(); save(); });
+  const rowSel = h('select', {'aria-label':'Acordes por fila'}, [['0','Automático'], ['2','2 por fila'], ['3','3 por fila'], ['4','4 por fila'], ['5','5 por fila'], ['6','6 por fila'], ['8','8 por fila']].map(([v, tx]) => h('option', {value:v, selected:String(db.ui.perRow) === v}, tx)));
+  rowSel.addEventListener('change', () => { db.ui.perRow = +rowSel.value; save(); buildScore(); });
+  const scoreBar = h('div', {class:'scorebar'}, h('span', {class:'muted small', text:'Pentagrama'}), h('div', {class:'grow'}),
+    h('label', {class:'wideonly muted small', style:'margin:0;display:flex;align-items:center;gap:6px'}, 'Ancho', splitIn), rowSel);
+  applySplit();
+  R.append(scoreBar, edBox, scoreBox);
   P.cells = []; P.edit = null;
   const STEPN = {C:0,D:1,E:2,F:3,G:4,A:5,B:6};
   const SG = 8, ST0 = 28, TB0 = ST0 + 4*SG + 3.5*SG + 22, TG = 10, SVGH = TB0 + 5*TG + 14, CLW = 40;
@@ -1640,7 +1679,7 @@ function songPlay(root){
   }
   function buildScore(){
     scoreBox.replaceChildren(); P.cells = [];
-    const W = Math.max(300, (scoreBox.clientWidth || 520) - 4), n = Math.max(1, Math.floor((W - CLW - 6) / 112)), cw = Math.floor((W - CLW - 6) / n);
+    const W = Math.max(300, (scoreBox.clientWidth || 520) - 4), n = db.ui.perRow > 0 ? db.ui.perRow : Math.max(1, Math.floor((W - CLW - 6) / 104)), cw = Math.floor((W - CLW - 6) / n);
     P.scoreW = W;
     for(let r = 0; r*n < P.total; r++){
       const row = h('div', {class:'srow'}), hdr = h('div', {class:'shdr', style:'margin-left:'+CLW+'px'});
@@ -1654,7 +1693,7 @@ function songPlay(root){
         const i = r*n + k; if(i >= P.total) break;
         const x0 = CLW - 6 + k*cw, g = cellSvg(i, x0, cw);
         const nm = h('div', {class:'scn', text:D(tn(i))}), tt = h('div', {class:'sct'});
-        const cc = h('div', {class:'sc', style:'width:'+cw+'px'}, nm, diagram(tn(i), 74), tt);
+        const cc = h('div', {class:'sc', style:'width:'+cw+'px'}, nm, diagram(tn(i), Math.max(40, Math.min(80, cw - 14))), tt);
         const pick = () => selectChord(i, true);
         cc.addEventListener('click', pick); g.addEventListener('click', pick);
         hdr.append(cc); svg.append(g);
@@ -1717,7 +1756,13 @@ function songPlay(root){
       seekTo = t[i] - 0.6;
     }
     saveTimes(); updTimes(); refreshEd();
-    if(P.ready && seekTo != null) try{ P.player.seekTo(Math.max(0, seekTo), true); P.player.playVideo(); }catch(e){}
+    /* ajustar NO reproduce nada: el vídeo se queda donde estaba. Para oírlo, botón «Escuchar este acorde». */
+  }
+  /* escuchar un acorde: empieza un poco antes y se para solo cuando acaba */
+  function listen(i){
+    const t0 = P.times[i], t1 = i + 1 < P.total ? P.times[i+1] : null;
+    if(t0 == null || !P.ready) return;
+    try{ P.stopAt = (t1 != null ? t1 : t0 + 2.5) + 0.25; P.player.seekTo(Math.max(0, t0 - 0.6), true); P.player.playVideo(); }catch(e){}
   }
   function refreshEd(){
     const i = P.edit;
@@ -1737,7 +1782,7 @@ function songPlay(root){
           h('span', {text:'Dura menos / más'}), pm('dur'),
           h('span', {text:'Mover este y los siguientes'}), pm('shift'),
           h('span', {text:'Tamaño del ajuste'}), stepSel),
-        h('div', {class:'row', style:'margin-top:8px'}, h('button', {onclick:()=>{ if(P.ready) try{ P.player.seekTo(Math.max(0, t0 - 0.5), true); P.player.playVideo(); }catch(e){} }}, '▶ Escuchar este acorde'))));
+        h('div', {class:'row', style:'margin-top:8px'}, h('button', {onclick:()=>listen(i)}, '▶ Escuchar este acorde'), h('button', {onclick:()=>{ if(P.ready) try{ P.player.pauseVideo(); P.stopAt = null; }catch(e){} }}, '⏸ Parar'))));
   }
   P.refreshEd = refreshEd;
   buildScore();
@@ -1766,6 +1811,7 @@ function songPlay(root){
     let c = -1, best = -1;
     for(let i = 0; i < P.total; i++){ const x = P.times[i]; if(x != null && x <= t && x >= best){ best = x; c = i; } }
     if(c !== P.cur) setCur(c);
+    if(P.stopAt != null && t >= P.stopAt){ P.stopAt = null; try{ P.player.pauseVideo(); }catch(e){} }
     if(P.moveCursor) P.moveCursor(t);
   }, 100);
 
@@ -1802,7 +1848,6 @@ document.addEventListener('keydown', e => {
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement && document.activeElement.tagName)) return;
   if(e.code !== 'Space' && e.key !== 'Enter') return;
   if(view === 'canciones' && play && play.syncOn){ e.preventDefault(); if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); play.markChord(); }
-  else if(view === 'practicar' && pTab === 'reto' && reto){ e.preventDefault(); retoTap(); }
 });
 
 /* ============================== VISTA: progreso ============================== */
@@ -1836,10 +1881,10 @@ function renderProgreso(root){
     })(),
     h('h3', {text:'Cambios de acorde'}),
     (() => {
-      const ks = Object.keys(db.pairs);
+      const ks = Object.keys(db.pairs).filter(k => db.pairs[k].maxBpm);
       if(!ks.length) return h('p', {class:'muted', text:'Aún no hay datos. Prueba los ejercicios de Practicar.'});
-      return h('div', {class:'card'}, h('table', {}, h('tr', {}, h('th',{text:'Par'}), h('th',{text:'Cambios en 1 min'}), h('th',{text:'Tempo máx.'})),
-        ks.map(k => h('tr', {}, h('td',{text:k.replace('-',' ↔ ')}), h('td',{text:db.pairs[k].cpm || '—'}), h('td',{text:db.pairs[k].maxBpm ? db.pairs[k].maxBpm+' BPM' : '—'})))));
+      return h('div', {class:'card'}, h('table', {}, h('tr', {}, h('th',{text:'Par'}), h('th',{text:'Tempo máx.'})),
+        ks.map(k => h('tr', {}, h('td',{text:k.replace('-',' ↔ ')}), h('td',{text:db.pairs[k].maxBpm+' BPM'})))));
     })(),
     h('h3', {text:'Progresiones'}),
     (() => {
