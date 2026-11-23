@@ -1,5 +1,5 @@
 // Service worker sencillo: primero la red (para que las actualizaciones se vean), y si no hay conexión, la copia guardada.
-const CACHE = 'guitarra-v7';
+const CACHE = 'guitarra-v8';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', e => {
@@ -11,6 +11,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  if (new URL(req.url).pathname.includes('/videos/')) return;   // los vídeos pesan mucho: se piden siempre a la red
   e.respondWith(
     fetch(req).then(res => {
       const copy = res.clone();
