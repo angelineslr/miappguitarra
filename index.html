@@ -92,7 +92,8 @@ label{display:block;font-weight:600;font-size:13.5px;margin:12px 0 5px;color:var
 .songcard button.open{flex:1;text-align:left;border:0;background:none;padding:6px 0}
 .songcard button.open:hover{background:none}
 .vidwrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:var(--r);overflow:hidden}
-.vidwrap iframe,.vidwrap #ytbox{position:absolute;inset:0;width:100%;height:100%}
+.vidwrap iframe,.vidwrap #ytbox{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.vidshield{position:absolute;inset:0;z-index:2;cursor:pointer}
 .vidmsg{padding:16px;color:#fff;font-size:14.5px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center}
 .vidmsg a{color:#c7d2fe}
 .ctrl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
@@ -537,6 +538,19 @@ function refreshDatalist(){ const dl = $('#chordlist'); dl.replaceChildren(...al
 
 /* ============================== analizador de canciones ============================== */
 const CHORD_TOKEN = /^[A-G][#b]?(?:maj|min|dim|aug|sus|add|m|M|-|\+)?\d*(?:(?:sus|add)\d*|[#b]\d+|\([^)]*\))*(?:\/[A-G][#b]?)?$/;
+const ES2EN = {DO:'C', RE:'D', MI:'E', FA:'F', SOL:'G', LA:'A', SI:'B'};
+const EN2ES = {C:'DO', D:'RE', E:'MI', F:'FA', G:'SOL', A:'LA', B:'SI'};
+/* notación española (solo en mayúsculas, para no confundir con palabras de la letra): DO, REm, SOL7, FA#m, SIb… */
+function spToEn(tok){
+  const m = /^(DO|RE|MI|FA|SOL|LA|SI)([#b]?)(.*)$/.exec(tok); if(!m) return null;
+  let rest = m[3];
+  const sl = rest.indexOf('/');
+  if(sl >= 0){ const b = /^(DO|RE|MI|FA|SOL|LA|SI)([#b]?)$/.exec(rest.slice(sl+1)); if(b) rest = rest.slice(0, sl) + '/' + ES2EN[b[1]] + b[2]; }
+  return ES2EN[m[1]] + m[2] + rest;
+}
+function toES(name){
+  return String(name).replace(/^([A-G])/, (x, l) => EN2ES[l]).replace(/\/([A-G])/, (x, l) => '/' + EN2ES[l]);
+}
 const FILLERS = new Set(['|','o','O','x2','x3','x4','-','/','N.C.','NC','...','%']);
 function chordLine(L){
   let line = L;
@@ -547,7 +561,8 @@ function chordLine(L){
   while((m = re.exec(line))){
     let tok = m[0].replace(/^[(\[]+|[)\],;.]+$/g, '');
     if(tok === '' || FILLERS.has(tok) || /^\(?x\d\)?$/i.test(tok)) continue;
-    if(CHORD_TOKEN.test(tok)) items.push({ name:tok, col:m.index + (m[0].length - m[0].replace(/^[(\[]+/, '').length) });
+    const en = spToEn(tok), nm = en || tok;
+    if(CHORD_TOKEN.test(nm)) items.push({ name:nm, es:!!en, col:m.index + (m[0].length - m[0].replace(/^[(\[]+/, '').length) });
     else return null;
   }
   return items.length ? { label, items } : null;
@@ -555,7 +570,7 @@ function chordLine(L){
 function isTabLine(L){ return /^\s*[eBGDAE]\s*[|:\-]/.test(L) && (L.match(/-/g)||[]).length >= 4; }
 function parseSong(raw){
   const lines = String(raw||'').replace(/\r/g,'').split('\n');
-  const out = []; let n = 0;
+  const out = []; let n = 0, es = false;
   for(let i = 0; i < lines.length; i++){
     const L = lines[i];
     if(!L.trim()){ out.push({t:'blank'}); continue; }
@@ -569,12 +584,13 @@ function parseSong(raw){
       let lyric = '';
       const nx = lines[i+1];
       if(nx !== undefined && nx.trim() && !chordLine(nx) && !isTabLine(nx)){ lyric = nx; i++; }
+      if(ch.items.some(it => it.es)) es = true;
       out.push({ t:'cl', label:ch.label, lyric, chords:ch.items.map(it => ({ name:it.name, col:it.col, idx:n++ })) });
       continue;
     }
     out.push({t:'text', text:L});
   }
-  return { lines:out, total:n };
+  return { lines:out, total:n, es };
 }
 function ytId(url){
   if(!url) return null;
@@ -1316,6 +1332,7 @@ function songPlay(root){
   P.lineChords = {}; Object.keys(P.lineOf).forEach(i => { (P.lineChords[P.lineOf[i]] = P.lineChords[P.lineOf[i]] || []).push(+i); });
   Object.values(P.lineChords).forEach(a => a.sort((x,y)=>x-y));
   const tn = i => transposeName(flat[i].name, song.transpose||0);
+  const D = nm => parsed.es ? toES(nm) : nm;   /* nombre para mostrar (DO/RE/MI si la letra venía así) */
   P.tn = tn;
   const stt = () => db.songStats[song.id] || (db.songStats[song.id] = { sec:0, rateSec:{}, loops:0, status:'aprendiendo' });
 
@@ -1337,6 +1354,8 @@ function songPlay(root){
   const wrap = h('div', {class:'vidwrap'});
   const ytbox = h('div', {id:'ytbox'});
   wrap.append(ytbox);
+  const shield = h('div', {class:'vidshield', title:'Reproducir / pausar'}); wrap.append(shield);
+  shield.addEventListener('click', ()=>{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); if(P.ready) try{ P.playing ? P.player.pauseVideo() : P.player.playVideo(); }catch(e){} });
   const vidMsg = txt => { wrap.replaceChildren(h('div', {class:'vidmsg'}, h('div', {}, txt, ' ', vid ? h('a', {href:'https://www.youtube.com/watch?v='+vid, target:'_blank', rel:'noopener'}, 'Abrir en YouTube') : null))); };
   const hasAudio = !!song.audioName;
   const hasSrc = !!vid || hasAudio;
@@ -1398,7 +1417,7 @@ function songPlay(root){
     refreshSync(); P.lastLeft = 'x'; renderPanel();
   }
   const nud = d => { const i = P.syncIdx - 1; if(i < 0 || P.times[i] == null){ toast('Aún no hay ningún acorde marcado'); return; }
-    P.times[i] = Math.max(0, Math.round((P.times[i] + d)*100)/100); saveTimes(); toast(tn(i)+' → '+fmtTime(P.times[i])+(P.times[i]%1 ? '' : '')); if(P.ready) try{ P.player.seekTo(Math.max(0, P.times[i]-0.5), true); P.player.playVideo(); }catch(e){} };
+    P.times[i] = Math.max(0, Math.round((P.times[i] + d)*100)/100); saveTimes(); toast(D(tn(i))+' → '+fmtTime(P.times[i])+(P.times[i]%1 ? '' : '')); if(P.ready) try{ P.player.seekTo(Math.max(0, P.times[i]-0.5), true); P.player.playVideo(); }catch(e){} };
   syncBox.append(h('div', {class:'tabs', style:'margin:0 0 10px'}, modeLine, modeChord), syncTxt, h('div', {style:'margin:10px 0'}, markBtn),
     h('div', {class:'row'}, undoBtn, h('button', {onclick:()=>nud(-0.1), title:'El último acorde marcado suena antes'}, '◀ −0,1 s'), h('button', {onclick:()=>nud(0.1), title:'El último acorde marcado suena después'}, '+0,1 s ▶'), clearBtn));
   L.append(syncBox);
@@ -1409,7 +1428,7 @@ function songPlay(root){
     modeLine.classList.toggle('on', P.syncMode === 'line'); modeChord.classList.toggle('on', P.syncMode !== 'line');
     const lineM = P.syncMode === 'line';
     markBtn.textContent = lineM ? '¡Empieza la línea! (Espacio)' : '¡Cambia el acorde! (Espacio)';
-    const nextTxt = () => { if(P.syncIdx >= P.total) return null; if(!lineM) return tn(P.syncIdx); return (P.lineChords[P.lineOf[P.syncIdx]] || [P.syncIdx]).map(tn).join(' '); };
+    const nextTxt = () => { if(P.syncIdx >= P.total) return null; if(!lineM) return D(tn(P.syncIdx)); return (P.lineChords[P.lineOf[P.syncIdx]] || [P.syncIdx]).map(i => D(tn(i))).join(' '); };
     syncTxt.replaceChildren(
       h('b', {text:'Sincronizar'}),
       h('p', {class:'small muted', style:'margin:4px 0', text: lineM
@@ -1456,7 +1475,7 @@ function songPlay(root){
     if(keyNow === P.lastLeft) return;
     P.lastLeft = keyNow;
     if(l == null){ panel.replaceChildren(h('div', {class:'muted small', text:'Toca un acorde de la letra para ver cómo se toca.'})); return; }
-    const card = (i, lbl) => i != null && i < P.total ? h('div', {class:'c'}, h('div', {class:'lbl', text:lbl}), diagram(tn(i), i === l ? 100 : 76), h('div', {class:'nm', text:tn(i)})) : null;
+    const card = (i, lbl) => i != null && i < P.total ? h('div', {class:'c'}, h('div', {class:'lbl', text:lbl}), diagram(tn(i), i === l ? 100 : 76), h('div', {class:'nm', text:D(tn(i))})) : null;
     panel.replaceChildren(...[card(l, P.syncOn ? 'Marca este' : (l === P.cur ? 'Ahora' : 'Elegido')), card(l+1, P.syncOn ? 'Después' : 'Siguiente'),
       h('div', {class:'c', style:'align-self:center'},
         h('button', {onclick:()=>playChord(tn(l),'strum')}, '▶ Sonido'),
@@ -1493,7 +1512,7 @@ function songPlay(root){
       const lyric = ln.lyric || '', cs = ln.chords;
       const seg = (c, txt) => {
         let chEl;
-        if(c){ chEl = h('button', {class:'ch'+(P.times[c.idx] != null ? ' has' : ''), type:'button'}, tn(c.idx)); chEl.addEventListener('click', ()=>onChordTap(c.idx, chEl)); P.chEls[c.idx] = chEl; }
+        if(c){ chEl = h('button', {class:'ch'+(P.times[c.idx] != null ? ' has' : ''), type:'button'}, D(tn(c.idx))); chEl.addEventListener('click', ()=>onChordTap(c.idx, chEl)); P.chEls[c.idx] = chEl; }
         else chEl = h('span', {class:'ch ph'}, '·');
         return h('span', {class:'seg'}, chEl, h('span', {class:'tx', text:txt}));
       };

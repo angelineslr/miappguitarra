@@ -1,5 +1,5 @@
 // Service worker sencillo: primero la red (para que las actualizaciones se vean), y si no hay conexión, la copia guardada.
-const CACHE = 'guitarra-v3';
+const CACHE = 'guitarra-v3c';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', e => {
