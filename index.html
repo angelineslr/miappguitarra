@@ -1282,7 +1282,7 @@ function rhythmDetail(root){
 
   const vid = ytId(R.vid);
   if(vid){
-    const wrap = h('div', {class:'vidwrap', style:'margin-top:12px'});
+    const wrap = h('div', {class:'vidwrap', style:'margin-top:12px;max-width:480px'});
     D.vid = mountVideo(wrap, vid, () => D.rate);
     const playB = h('button', {onclick:() => { const v = D.vid; if(!v || !v.ready) return; try{ v.playing ? v.player.pauseVideo() : v.player.playVideo(); }catch(e){} }}, '⏯');
     const rateSel = h('select', {'aria-label':'Velocidad'}, [0.25,0.5,0.75,1].map(r => h('option', {value:r, selected:r === 1}, r === 1 ? 'Velocidad normal' : '× '+String(r).replace('.',','))));
@@ -1302,7 +1302,7 @@ function rhythmDetail(root){
 
   const vfiles = R.files || (R.file ? [{ t:'', f:R.file }] : []);
   if(!vid && vfiles.length){
-    const v = h('video', {controls:true, playsinline:true, preload:'metadata', style:'width:100%;border-radius:14px;background:#000;display:block'});
+    const v = h('video', {controls:true, playsinline:true, preload:'metadata', style:'width:100%;max-width:480px;max-height:42vh;border-radius:12px;background:#000;display:block'});
     const msg = h('div', {class:'note', style:'display:none'});
     const ctl = h('div', {class:'ctrl'});
     const rateSel = h('select', {'aria-label':'Velocidad'}, [0.5,0.75,1].map(r => h('option', {value:r, selected:r === 1}, r === 1 ? 'Velocidad normal' : '× '+String(r).replace('.',','))));
@@ -1565,6 +1565,7 @@ function songPlay(root){
     loopBtn.classList.toggle('primary', P.loop);
     loopInfo.textContent = (P.A != null ? 'A '+fmtTime(P.A) : '') + (P.B != null ? '  B '+fmtTime(P.B) : '');
   }
+  const delSyncBtn = h('button', {class:'danger', title:'Borra todas las marcas de tiempo de esta canción para volver a sincronizar desde cero', onclick:()=>{ if(!P.times.some(x => x != null)) return; if(!confirm('¿Borrar la sincronización de esta canción para empezar de nuevo?')) return; P.times = P.times.map(()=>null); P.syncIdx = 0; saveTimes(); refreshSync(); P.lastLeft = 'x'; renderPanel(); toast('Sincronización borrada'); }}, '🗑 Borrar sincronización');
   const syncBtn = h('button', {onclick:()=>{ P.syncOn = !P.syncOn; if(P.syncOn){ if(document.activeElement) document.activeElement.blur(); } if(P.refreshEd) P.refreshEd(); refreshSync(); P.lastLeft = 'x'; renderPanel(); }}, '⏱ Sincronizar');
   const hideBtn = h('button', {onclick:()=>{ P.hide = !P.hide; hideBtn.classList.toggle('primary', P.hide); textBox.classList.toggle('hide', P.hide); if(P.hide) textBox.querySelectorAll('.ch.rev').forEach(e => e.classList.remove('rev')); }}, '🙈 Ocultar acordes');
   const autoBtn = h('button', {class:'primary', onclick:()=>{ P.auto = !P.auto; autoBtn.classList.toggle('primary', P.auto); }}, '↓ Seguir');
@@ -1572,7 +1573,7 @@ function songPlay(root){
     h('div', {class:'ctrl'}, playBtn, h('button', {onclick:()=>seekBy(-5), title:'Retroceder 5 segundos'}, '↺ 5 s'), tm, rateSel, h('div', {class:'grow'})),
     seek,
     h('div', {class:'ctrl'}, aBtn, bBtn, loopBtn, clrBtn, loopInfo),
-    h('div', {class:'ctrl'}, syncBtn, hideBtn, autoBtn, h('span', {class:'muted small'}, 'Tono ', h('button', {onclick:()=>shift(-1), 'aria-label':'Bajar un semitono'}, '−'), ' ', trLbl, ' ', h('button', {onclick:()=>shift(1), 'aria-label':'Subir un semitono'}, '+')),
+    h('div', {class:'ctrl'}, syncBtn, delSyncBtn, hideBtn, autoBtn, h('span', {class:'muted small'}, 'Tono ', h('button', {onclick:()=>shift(-1), 'aria-label':'Bajar un semitono'}, '−'), ' ', trLbl, ' ', h('button', {onclick:()=>shift(1), 'aria-label':'Subir un semitono'}, '+')),
       h('span', {class:'muted small'}, 'Letra ', h('button', {onclick:()=>bumpLyr(-1), 'aria-label':'Letra más pequeña'}, 'A−'), ' ', h('button', {onclick:()=>bumpLyr(1), 'aria-label':'Letra más grande'}, 'A+')))
   );
 
@@ -1624,6 +1625,7 @@ function songPlay(root){
         : 'Pulsa el botón (o Espacio) justo cuando empiece a sonar el acorde indicado. También puedes tocar un acorde de la letra para saltar a él. Hecho: '+marked+' de '+P.total+'.'}),
       P.syncIdx < P.total ? h('div', {text:(lineM ? 'Siguiente línea: ' : 'Siguiente: ')+nextTxt(), style:'font-weight:700'}) : h('div', {text:'Ya has marcado todo. ✔'}));
     markBtn.disabled = !P.ready;
+    delSyncBtn.disabled = !marked;
     Object.values(P.chEls).forEach(e => e.classList.remove('ptr'));
     if(P.syncOn && P.chEls[P.syncIdx]) P.chEls[P.syncIdx].classList.add('ptr');
   }
